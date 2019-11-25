@@ -351,110 +351,131 @@ public:
   static const vector<int> powers;
   static const int MAX_DEPTH = 2; // root has depth = 0, must be even to maximize score
 
-  static vector<Control> optimalControl(const World& world) {
+  vector<Control> optimalControl(const World& world) {
     //return {{18, 100}, {18, 100}};
-    Node root(nullptr, world);
+    //Node root(nullptr, world);
     //root.score = vanillaMinimax(root, 0);
-    root.score = alphaBeta(root, -numeric_limits<float>::max(), numeric_limits<float>::max(), 0);
-    vector<Node> optimalNodes;
-    for (const auto& child : root.children) {
-      if (child.score == root.score) {
-        optimalNodes.push_back(child);
-        cerr << child.controls << endl;
-      }
-    }
-    cerr << " score: " << root.score << endl;
-    return selectRandom(optimalNodes).controls;
+    vector<Control> empty;
+    float score = alphaBeta(world, empty, -numeric_limits<float>::max(), numeric_limits<float>::max(), 0);
+    // for (const auto& child : root.children) {
+    //   if (child.score == root.score) {
+    //     optimalNodes.push_back(child);
+    //     cerr << child.controls << endl;
+    //   }
+    // }
+    cerr << bestControls;
+    cerr << " score: " << score << endl;
+
+    return bestControls;//selectRandom(optimalNodes).controls;
   }
 private:
   // paranoid
-  static float vanillaMinimax(Node& node, int depth) {
+  vector<Control> bestControls;
+
+  // static float vanillaMinimax(Node& node, int depth) {
+  //   if (depth == Brain::MAX_DEPTH) {
+  //     return estimate(node);
+  //   }
+  //   generateChildren(node, depth);
+  //   float score = -numeric_limits<float>::max();
+  //   for (Node& child : node.children) {
+  //     child.score = -vanillaMinimax(child, depth + 1);
+  //     if (child.score > score)
+  //       score = child.score;
+  //   }
+  //   return score;
+  // }
+  float alphaBeta(World world, vector<Control>& controls, float alpha, float beta, int depth) {
     if (depth == Brain::MAX_DEPTH) {
-      return estimate(node);
-    }
-    generateChildren(node, depth);
-    float score = -numeric_limits<float>::max();
-    for (Node& child : node.children) {
-      child.score = -vanillaMinimax(child, depth + 1);
-      if (child.score > score)
-        score = child.score;
-    }
-    return score;
-  }
-  static float alphaBeta(Node& node, float alpha, float beta, int depth) {
-    if (depth == Brain::MAX_DEPTH) {
-      return estimate(node);
+      //cerr << controls << " ";
+      return estimate(world);
     }
 
-    generateChildren(node, depth);
-    float score;
-    if (!depth % 2) {
-      score = -numeric_limits<float>::max();
-      for (Node& child : node.children) {
-        child.score = alphaBeta(child, alpha, beta, depth + 1);
-        score = max(score, child.score);
-        alpha = max(alpha, score);
-        if (alpha >= beta)
-          return score;
-      }
-    } else {
-      score = numeric_limits<float>::max();
-      for (Node& child : node.children) {
-        child.score = alphaBeta(child, alpha, beta, depth + 1);
-        score = min(score, child.score);
-        beta = min(beta, score);
-        if (alpha >= beta)
-          return score;
-      }
-    }
-    return score;
-  }
-
-  static void generateChildren(Node& node, int depth) {
-    for (int angle1 : Brain::angles) {
-      for (int power1 : Brain::powers) {
-        for (int angle2 : Brain::angles) {
-          for (int power2 : Brain::powers) {
-            Node child(&node, node.world);
-            //if (node.parent != nullptr)
-              //cout << "1: " << node.world.pods[0].r << " " << child.world.pods[0].r << endl;
-            if (!(depth % 2)) // my turn
-              child.controls = {{angle1, power1}, {angle2, power2}};
-            else {
-              child.controls = node.controls;
-              child.controls.push_back({angle1, power1});
-              child.controls.push_back({angle2, power2});
-              child.world.blink(child.controls);
-              //cout << "2: " << child.world.pods[0].r << endl;
+    float bestScore = -numeric_limits<float>::max();
+      for (int angle1 : Brain::angles) 
+        for (int power1 : Brain::powers) 
+          for (int angle2 : Brain::angles) 
+            for (int power2 : Brain::powers) {
+              float score;
+              auto copyControls = controls;
+              copyControls.push_back({angle1, power1});
+              copyControls.push_back({angle2, power2});
+              if (!(depth % 2)) {
+                World copyWorld = world;
+                copyWorld.blink(copyControls);
+                vector<Control> empty;
+                score = -alphaBeta(copyWorld, empty, -beta, -alpha, depth + 1);
+              } else {
+                score = -alphaBeta(world, copyControls, -beta, -alpha, depth + 1);
+              }
+              if (score > bestScore) {
+                bestScore = score;
+                if (!depth)
+                  bestControls = copyControls;
+              }
+              alpha = max(alpha, score);
+              if (alpha >= beta) 
+                return bestScore;
             }
-            node.children.push_back(child);
-          }
-        }
-      }
-    }
+                //cout << "2: " << child.world.pods[0].r << endl;
+    // } else {
+    //   score = numeric_limits<float>::max();
+    //   for (Node& child : node.children) {
+    //     child.score = alphaBeta(child, alpha, beta, depth + 1);
+    //     score = min(score, child.score);
+    //     beta = min(beta, score);
+    //     if (alpha >= beta)
+    //       return score;
+    //   }
+    // }
+    return bestScore;
   }
+
+  // static void generateChildren(Node& node, int depth) {
+  //   for (int angle1 : Brain::angles) {
+  //     for (int power1 : Brain::powers) {
+  //       for (int angle2 : Brain::angles) {
+  //         for (int power2 : Brain::powers) {
+  //           Node child(&node, node.world);
+  //           //if (node.parent != nullptr)
+  //             //cout << "1: " << node.world.pods[0].r << " " << child.world.pods[0].r << endl;
+  //           if (!(depth % 2)) // my turn
+  //             child.controls = {{angle1, power1}, {angle2, power2}};
+  //           else {
+  //             child.controls = node.controls;
+  //             child.controls.push_back({angle1, power1});
+  //             child.controls.push_back({angle2, power2});
+  //             child.world.blink(child.controls);
+  //             //cout << "2: " << child.world.pods[0].r << endl;
+  //           }
+  //           node.children.push_back(child);
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
   static float reward2(const Pod& p1, const Pod& p2, const vector<Checkpoint>& cps) {
     const float leaderReward = 40000;
-    const float followerReward = 30000;
+    const float followerReward = 40000;
     const float speedCoef = 0.5;
-    const float angleCoef = 500;
-    const float shieldPenalty = 50;
+    const float angleCoef = 1000;
+    const float shieldPenalty = 300;
     float reward = 0;
     reward += max(p1.checkpointsPassed, p2.checkpointsPassed)*leaderReward;
     reward += min(p1.checkpointsPassed, p2.checkpointsPassed)*followerReward;
     for (const auto& p: {p1, p2}) {
       reward -= (cps[p.nextCheckpoint].r - p.r).L2Norm();
       reward += p.v.L2Norm() * speedCoef;
-      reward -= abs(p.facing.angle((cps[p.nextCheckpoint].r - p.r).toFloat())) * angleCoef;
-      reward -= (p.shieldCd > 0)*shieldPenalty;
+      reward -= abs(p.v.toFloat().angle((cps[p.nextCheckpoint].r - p.r).toFloat())) * angleCoef;
+      reward -= p.shieldCd*shieldPenalty;
     }
     return reward;
   }
 
-  static float estimate(const Node& node) {
-    const auto& pods = node.world.pods;
-    const auto& checkpoints = node.world.checkpoints;
+  static float estimate(const World& world) {
+    const auto& pods = world.pods;
+    const auto& checkpoints = world.checkpoints;
     const auto& myPod1 = pods[0];
     const auto& myPod2 = pods[1];
     const auto& enemyPod1 = pods[2];
@@ -462,7 +483,7 @@ private:
     float myReward = reward2(myPod1, myPod2, checkpoints);
     float enemyReward = reward2(enemyPod1, enemyPod2, checkpoints);
   
-    // cerr << node.controls << " " << myReward - enemyReward << " " ;
+    //cerr << " " << myReward - enemyReward << endl;
     // cerr << myPod1.r << " " << myPod2.r << "\n";
     //cout << " passed: " << Vec<int>(enemyPod1.checkpointsPassed, enemyPod2.checkpointsPassed) << endl;
 
@@ -479,7 +500,7 @@ private:
 
 };
 
-const vector<int> Brain::angles {-18, 0, 18};
+const vector<int> Brain::angles {-18, -9, 0, 9, 18};
 const vector<int> Brain::powers {0, 100, Control::SHIELD};//, Control::SHIELD, Control::BOOST};
 
 #ifdef TESTING
@@ -567,7 +588,8 @@ void TestDecision() {
   vector<Pod> pods {mp1, mp2, ep1, ep2};
   vector<Checkpoint> cps {cp1, cp2};
   World world(cps, pods);
-  cout << Brain::optimalControl(world) << endl;
+  Brain brain;
+  cout << brain.optimalControl(world) << endl;
 }
 
 
@@ -597,6 +619,7 @@ int main() {
   // *hasBoost = false;
   vector<Pod> pods(4, {0,0,0,0,0});
   int round = 0;
+  Brain brain;
   while (1) {
     for (int i = 0; i < 4; i++) {
         int x; 
@@ -624,7 +647,7 @@ int main() {
     }
     cerr << "coord: " << pods[0].r << endl;
     World world(checkpoints, pods);
-    auto controls = Brain::optimalControl(world);
+    auto controls = brain.optimalControl(world);
     for (int i = 0; i < 2; i++) {
       Vec<float> unit(1, 0);
       unit.rotate(pods[i].angle + controls[i].angle);
