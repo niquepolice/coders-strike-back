@@ -372,19 +372,6 @@ private:
   // paranoid
   vector<Control> bestControls;
 
-  // static float vanillaMinimax(Node& node, int depth) {
-  //   if (depth == Brain::MAX_DEPTH) {
-  //     return estimate(node);
-  //   }
-  //   generateChildren(node, depth);
-  //   float score = -numeric_limits<float>::max();
-  //   for (Node& child : node.children) {
-  //     child.score = -vanillaMinimax(child, depth + 1);
-  //     if (child.score > score)
-  //       score = child.score;
-  //   }
-  //   return score;
-  // }
   float alphaBeta(World world, vector<Control>& controls, float alpha, float beta, int depth) {
     if (depth == Brain::MAX_DEPTH) {
       //cerr << controls << " ";
@@ -417,43 +404,8 @@ private:
               if (alpha >= beta) 
                 return bestScore;
             }
-                //cout << "2: " << child.world.pods[0].r << endl;
-    // } else {
-    //   score = numeric_limits<float>::max();
-    //   for (Node& child : node.children) {
-    //     child.score = alphaBeta(child, alpha, beta, depth + 1);
-    //     score = min(score, child.score);
-    //     beta = min(beta, score);
-    //     if (alpha >= beta)
-    //       return score;
-    //   }
-    // }
-    return bestScore;
+      return bestScore;
   }
-
-  // static void generateChildren(Node& node, int depth) {
-  //   for (int angle1 : Brain::angles) {
-  //     for (int power1 : Brain::powers) {
-  //       for (int angle2 : Brain::angles) {
-  //         for (int power2 : Brain::powers) {
-  //           Node child(&node, node.world);
-  //           //if (node.parent != nullptr)
-  //             //cout << "1: " << node.world.pods[0].r << " " << child.world.pods[0].r << endl;
-  //           if (!(depth % 2)) // my turn
-  //             child.controls = {{angle1, power1}, {angle2, power2}};
-  //           else {
-  //             child.controls = node.controls;
-  //             child.controls.push_back({angle1, power1});
-  //             child.controls.push_back({angle2, power2});
-  //             child.world.blink(child.controls);
-  //             //cout << "2: " << child.world.pods[0].r << endl;
-  //           }
-  //           node.children.push_back(child);
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
 
   static float reward2(const Pod& p1, const Pod& p2, const vector<Checkpoint>& cps) {
     const float leaderReward = 40000;
