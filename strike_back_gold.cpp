@@ -203,9 +203,9 @@ public:
 
   static constexpr float blinkTime = 1.2;
   static float collision (const Thing& a, const Thing& b) {    
-    const auto& relv = a.v - b.v   ; // realtive speed of pod a          // |  (b)
-    const auto& relbr = b.r - a.r;                                       // |/
-    float relvNormSq = relv.L2Sq();                                        // (a)___
+    const auto& relv = a.v - b.v   ; // realtive speed of pod a          //   |  (b)
+    const auto& relbr = b.r - a.r;                                       //   |/
+    float relvNormSq = relv.L2Sq();                                      //  (a)___
     
     int innerProd = relv * relbr;
 
@@ -256,8 +256,8 @@ public:
 
       // TODO: simultaneous collisions
       if (timeToNearestCollision <= timeRemain) {
-        move(timeToNearestCollision);
         updateNextCheckpoints(timeToNearestCollision);
+        move(timeToNearestCollision);
         kiss(pods[aIndex], pods[bIndex], timeToNearestCollision);
 
         timeRemain -= timeToNearestCollision;
@@ -293,9 +293,9 @@ private:
     return make_tuple(timeToNearestCollision, aIndex, bIndex);
   }
 
-  void updateNextCheckpoints(float timeToNearestCollision) {
+  void updateNextCheckpoints(float timeStep) {
     for (auto& pod : pods) {
-      // don't need assuming only one checkpoint coild be passed in a blink. perfomance costly(?)
+      // don't need assuming only one checkpoint could be passed in a blink. perfomance costly(?)
       // vector<int> indexes(checkpoints.size());
       // iota(indexes.begin(), indexes.end(), 0);
       // sort(indexes.begin(), indexes.end(), [checkpoints](int x, int y) 
@@ -304,7 +304,7 @@ private:
         if (i != pod.nextCheckpoint)
           continue;
         float t = collision(pod, checkpoints[i]);
-        if (t > 0 && t <= timeToNearestCollision) {
+        if (t > 0 && t <= timeStep) {
             pod.nextCheckpoint = (pod.nextCheckpoint + 1) % checkpoints.size();
             pod.checkpointsPassed++;
         }
