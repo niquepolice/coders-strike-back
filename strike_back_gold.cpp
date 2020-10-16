@@ -11,6 +11,8 @@ using namespace std;
 
 #ifdef TESTING
 #include "../red/test_runner.h"
+// #include "matplotlibcpp.h"
+// namespace plt = matplotlibcpp;
 #else
 template <class T>
 ostream& operator<< (ostream& os, const vector<T>& s) {
@@ -270,7 +272,7 @@ public:
   }
 
   vector<Pod> pods;
-  vector<Checkpoint>& checkpoints;
+  vector<Checkpoint> checkpoints;
 
 
 private:
@@ -352,33 +354,29 @@ public:
   static const int MAX_DEPTH = 2; // root has depth = 0, must be even to maximize score
 
   vector<Control> optimalControl(const World& world) {
-    //return {{18, 100}, {18, 100}};
-    //Node root(nullptr, world);
-    //root.score = vanillaMinimax(root, 0);
     vector<Control> empty;
-    float score = alphaBeta(world, empty, -numeric_limits<float>::max(), numeric_limits<float>::max(), 0);
-    // for (const auto& child : root.children) {
-    //   if (child.score == root.score) {
-    //     optimalNodes.push_back(child);
-    //     cerr << child.controls << endl;
-    //   }
-    // }
+    float score;
+    vector<Control> fullStepControls;
+    tie(score, fullStepControls) = alphaBeta(world, empty, -numeric_limits<float>::max(), numeric_limits<float>::max(), 0);
     cerr << bestControls;
-    cerr << " score: " << score << endl;
+    cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  score: " << score << endl;
 
-    return bestControls;//selectRandom(optimalNodes).controls;
+    return bestControls; // selectRandom(optimalNodes).controls;
   }
 private:
   // paranoid
   vector<Control> bestControls;
 
-  float alphaBeta(World world, vector<Control>& controls, float alpha, float beta, int depth) {
+  tuple<float, vector<Control>> alphaBeta(World world, vector<Control>& controls, float alpha, float beta, int depth) {
     if (depth == Brain::MAX_DEPTH) {
       //cerr << controls << " ";
-      return estimate(world);
+      float score = estimate(world);
+      // cerr << controls << " deep  " << score << endl ;
+      return make_tuple(score, vector<Control>());
     }
 
     float bestScore = -numeric_limits<float>::max();
+      vector<Control> fullStepControls;
       for (int angle1 : Brain::angles) 
         for (int power1 : Brain::powers) 
           for (int angle2 : Brain::angles) 
@@ -387,24 +385,29 @@ private:
               auto copyControls = controls;
               copyControls.push_back({angle1, power1});
               copyControls.push_back({angle2, power2});
-              if (!(depth % 2)) {
+              if ((depth % 2)) {
                 World copyWorld = world;
                 copyWorld.blink(copyControls);
                 vector<Control> empty;
-                score = -alphaBeta(copyWorld, empty, -beta, -alpha, depth + 1);
+                tie(score, std::ignore) = alphaBeta(copyWorld, empty, -beta, -alpha, depth + 1);
+                fullStepControls = copyControls;
+                score *= -1;
               } else {
-                score = -alphaBeta(world, copyControls, -beta, -alpha, depth + 1);
+                tie(score, fullStepControls) = alphaBeta(world, copyControls, -beta, -alpha, depth + 1);
+                score *= -1;
               }
+              if (depth == 0)
+                cerr << " score: " << score << " full controls: " << fullStepControls << endl;
               if (score > bestScore) {
                 bestScore = score;
                 if (!depth)
-                  bestControls = copyControls;
+                  bestControls = fullStepControls;
               }
               alpha = max(alpha, score);
               if (alpha >= beta) 
-                return bestScore;
+                return make_tuple(bestScore, fullStepControls);
             }
-      return bestScore;
+      return make_tuple(bestScore, fullStepControls);
   }
 
   static float reward2(const Pod& p1, const Pod& p2, const vector<Checkpoint>& cps) {
@@ -435,10 +438,6 @@ private:
     float myReward = reward2(myPod1, myPod2, checkpoints);
     float enemyReward = reward2(enemyPod1, enemyPod2, checkpoints);
   
-    //cerr << " " << myReward - enemyReward << endl;
-    // cerr << myPod1.r << " " << myPod2.r << "\n";
-    //cout << " passed: " << Vec<int>(enemyPod1.checkpointsPassed, enemyPod2.checkpointsPassed) << endl;
-
     return myReward - enemyReward;
   }
 
@@ -452,8 +451,8 @@ private:
 
 };
 
-const vector<int> Brain::angles {-18, -9, 0, 9, 18};
-const vector<int> Brain::powers {0, 100, Control::SHIELD};//, Control::SHIELD, Control::BOOST};
+const vector<int> Brain::angles {-18, 0, 18};
+const vector<int> Brain::powers {0, 100};//, Control::SHIELD, Control::BOOST};
 
 #ifdef TESTING
 
@@ -572,6 +571,7 @@ int main() {
   vector<Pod> pods(4, {0,0,0,0,0});
   int round = 0;
   Brain brain;
+  World world(checkpoints, pods);
   while (1) {
     for (int i = 0; i < 4; i++) {
         int x; 
@@ -581,6 +581,12 @@ int main() {
         int angle;
         int nextCp;
         cin >> pods[i].r.x >> pods[i].r.y >> pods[i].v.x >> pods[i].v.y >> angle >> nextCp; 
+        if ( i < 2) { 
+          cerr << " current state: " <<  pods[i].r.x << " " <<  pods[i].r.y << " " <<  pods[i].v.x << " " <<  pods[i].v.y ;
+          if (round)
+            cerr << " error: " <<  world.pods[i].r.x  - pods[i].r.x << " " <<  world.pods[i].r.y  - pods[i].r.y << " " <<  world.pods[i].v.x  - pods[i].v.x << " " <<  world.pods[i].v.y  - pods[i].v.y ;
+        }
+        cerr << endl;
         cin.ignore();
         // cerr << "angle: " << angle << " ";
         if (!round) {
@@ -597,20 +603,28 @@ int main() {
             (nextCp > oldNc ? nextCp - oldNc : nextCp + (checkpoints.size() - oldNc));
         }
     }
-    cerr << "coord: " << pods[0].r << endl;
-    World world(checkpoints, pods);
+    cerr <<  "next cps: " << pods[0].nextCheckpoint << " "  << pods[1].nextCheckpoint << endl;
+    world = World(checkpoints, pods);
     auto controls = brain.optimalControl(world);
+    cerr << "before cout \n";
     for (int i = 0; i < 2; i++) {
       Vec<float> unit(1, 0);
       unit.rotate(pods[i].angle + controls[i].angle);
-      cerr << pods[i].angle << " " << controls[i].angle << " " << unit << endl;
-      Vec<int> desired = pods[i].r + (unit * 10000).toInt();
+      cerr << "agnles: " << pods[i].angle << " " << controls[i].angle << " " << unit << endl;
+      Vec<int> desired = pods[i].r + (unit * 1000).toInt();
       cout << desired.x << " " << desired.y << " ";
       int power = controls[i].power;
       if (power >= 0)
         cout << power << endl;
       else if (power == Control::SHIELD)
         cout << "SHIELD" << endl;
+    }
+    cerr << controls << endl;
+    world.blink(controls);
+   
+     
+    for (int i = 0; i < 2; i++) {
+      cerr << " next state: " <<  world.pods[i].r.x << " " <<  world.pods[i].r.y << " " <<  world.pods[i].v.x << " " <<  world.pods[i].v.y ;
     }
     round++;
   }
