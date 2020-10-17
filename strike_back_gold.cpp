@@ -200,12 +200,12 @@ struct Pod : public Thing {
 
 class World {
 public:
-  World(vector<Checkpoint>& checkpoints, vector<Pod>& pods) : 
+  World(vector<Checkpoint>& checkpoints, vector<Pod> pods) : 
       checkpoints(checkpoints), pods(pods) {}
 
   static constexpr float blinkTime = 1.2;
   static float collision (const Thing& a, const Thing& b) {    
-    const auto& relv = a.v - b.v   ; // realtive speed of pod a          //   |  (b)
+    const auto& relv = a.v - b.v;    // realtive speed of pod a          //   |  (b)
     const auto& relbr = b.r - a.r;                                       //   |/
     float relvNormSq = relv.L2Sq();                                      //  (a)___
     
@@ -215,14 +215,17 @@ public:
       return -1;
 
     // dist from b's center to a's movement line
-    float roSq = Sq(relv.outerZ(relbr)) / relvNormSq;
+    float roSq = Sq(relv.outerZ(relbr) + 0.0) / relvNormSq;
 
     if (roSq > Sq(a.R + b.R))
       return -1;
 
-
-    float x = innerProd / relvNormSq - sqrt((Sq(a.R + b.R) - roSq) / relvNormSq);
-    return innerProd / relvNormSq - sqrt((Sq(a.R + b.R) - roSq) / relvNormSq);
+    // t = [<r,v> / |v| - sqrt((R1+R2)^2 - roSq)] / |v|
+    float t = innerProd / relvNormSq - sqrt((Sq(a.R + b.R) - roSq) / relvNormSq);
+     // if (t > 0 && t < 1.2)
+     // cerr << "from collision a.r " << a.r << " b.r " << b.r << " R " << a.R + b.R <<  " r " << relbr << " v  " << relv << " inner " << innerProd  << " roSq "<< roSq 
+     //       << " Sq[v, r] " <<Sq(relv.outerZ(relbr)) << " relvNormSq " << relvNormSq << " t: " << t  << endl;
+    return t;
   }
 
   // to avoid doublecounting collisions consider only collisions in (0, T]
@@ -307,6 +310,8 @@ private:
           continue;
         float t = collision(pod, checkpoints[i]);
         if (t > 0 && t <= timeStep) {
+           // cerr << " cp " << pod.nextCheckpoint << " i " << i << endl;
+           // cerr << "pod r " <<  pod.r << " cp r " << checkpoints[pod.nextCheckpoint].r << " t " << t << endl;
             pod.nextCheckpoint = (pod.nextCheckpoint + 1) % checkpoints.size();
             pod.checkpointsPassed++;
         }
@@ -357,9 +362,9 @@ public:
     vector<Control> empty;
     float score;
     vector<Control> fullStepControls;
-    tie(score, fullStepControls) = alphaBeta(world, empty, -numeric_limits<float>::max(), numeric_limits<float>::max(), 0);
-    cerr << bestControls;
-    cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  score: " << score << endl;
+    tie(score, fullStepControls) = randomSearch(world, empty, 0);
+    // cerr << bestControls;
+    // cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  score: " << score << endl;
 
     return bestControls; // selectRandom(optimalNodes).controls;
   }
@@ -367,7 +372,7 @@ private:
   // paranoid
   vector<Control> bestControls;
 
-  tuple<float, vector<Control>> alphaBeta(World world, vector<Control>& controls, float alpha, float beta, int depth) {
+  tuple<float, vector<Control>> randomSearch(World world, vector<Control>& controls, int depth) {
     if (depth == Brain::MAX_DEPTH) {
       //cerr << controls << " ";
       float score = estimate(world);
@@ -385,27 +390,18 @@ private:
               auto copyControls = controls;
               copyControls.push_back({angle1, power1});
               copyControls.push_back({angle2, power2});
-              if ((depth % 2)) {
-                World copyWorld = world;
-                copyWorld.blink(copyControls);
-                vector<Control> empty;
-                tie(score, std::ignore) = alphaBeta(copyWorld, empty, -beta, -alpha, depth + 1);
-                fullStepControls = copyControls;
-                score *= -1;
-              } else {
-                tie(score, fullStepControls) = alphaBeta(world, copyControls, -beta, -alpha, depth + 1);
-                score *= -1;
-              }
-              if (depth == 0)
-                cerr << " score: " << score << " full controls: " << fullStepControls << endl;
+              World copyWorld = world;
+              copyWorld.blink(copyControls);
+              vector<Control> empty;
+              tie(score, std::ignore) = randomSearch(copyWorld, empty, depth + 1);
+              fullStepControls = copyControls;
+              // if (depth == 0)
+              //   cerr << " score: " << score << " full controls: " << fullStepControls << endl;
               if (score > bestScore) {
                 bestScore = score;
                 if (!depth)
                   bestControls = fullStepControls;
               }
-              alpha = max(alpha, score);
-              if (alpha >= beta) 
-                return make_tuple(bestScore, fullStepControls);
             }
       return make_tuple(bestScore, fullStepControls);
   }
@@ -417,6 +413,7 @@ private:
     const float angleCoef = 1000;
     const float shieldPenalty = 300;
     float reward = 0;
+    // cerr << p1.checkpointsPassed << " " << p2.checkpointsPassed << endl;
     reward += max(p1.checkpointsPassed, p2.checkpointsPassed)*leaderReward;
     reward += min(p1.checkpointsPassed, p2.checkpointsPassed)*followerReward;
     for (const auto& p: {p1, p2}) {
@@ -433,12 +430,9 @@ private:
     const auto& checkpoints = world.checkpoints;
     const auto& myPod1 = pods[0];
     const auto& myPod2 = pods[1];
-    const auto& enemyPod1 = pods[2];
-    const auto& enemyPod2 = pods[3];
     float myReward = reward2(myPod1, myPod2, checkpoints);
-    float enemyReward = reward2(enemyPod1, enemyPod2, checkpoints);
   
-    return myReward - enemyReward;
+    return myReward;
   }
 
   template <typename T>
@@ -473,6 +467,11 @@ void TestCollision() {
   Pod p4 (1600, -100, -50, 228);
   t = World::collision(p3, p4);
   ASSERT_EQUAL(t, 20.0);
+
+  Pod p5 (9941, 4184, -60, -305);
+  Checkpoint c2(5980, 4234);
+  t = World::collision(p5, c2);
+  ASSERT(t > World::blinkTime || t < 0);
 }
 
 // coordinates are extraordinary, Oy looks south
@@ -557,13 +556,16 @@ int main() {
 int main() {
   int laps;
   cin >> laps; cin.ignore();
+  cerr << laps << endl;
   int checkpointCount;
   cin >> checkpointCount; cin.ignore();
+  cerr << checkpointCount << endl;
   vector<Checkpoint> checkpoints;
   for (int i = 0; i < checkpointCount; i++) {
       int checkpointX;
       int checkpointY;
       cin >> checkpointX >> checkpointY; cin.ignore();
+      cerr << checkpointX << " " << checkpointY << endl;
       checkpoints.emplace_back(checkpointX, checkpointY);
   }
   // bool* hasBoost;
@@ -573,7 +575,7 @@ int main() {
   Brain brain;
   World world(checkpoints, pods);
   while (1) {
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 2; i++) {
         int x; 
         int y; 
         int vx; 
@@ -581,6 +583,7 @@ int main() {
         int angle;
         int nextCp;
         cin >> pods[i].r.x >> pods[i].r.y >> pods[i].v.x >> pods[i].v.y >> angle >> nextCp; 
+        cerr << pods[i].r.x <<" "<< pods[i].r.y <<" "<< pods[i].v.x <<" "<< pods[i].v.y <<" "<< angle <<" "<< nextCp << endl; 
         if ( i < 2) { 
           cerr << " current state: " <<  pods[i].r.x << " " <<  pods[i].r.y << " " <<  pods[i].v.x << " " <<  pods[i].v.y ;
           if (round)
@@ -591,7 +594,7 @@ int main() {
         // cerr << "angle: " << angle << " ";
         if (!round) {
           angle = Vec<float>(1, 0).angle((checkpoints[1].r - pods[i].r).toFloat()) * 180 / M_PI;
-          cerr << " AAAAAA ngle " << angle;
+          // cerr << " AAAAAA ngle " << angle;
         }
         pods[i].setAngle(angle);
 
@@ -603,14 +606,14 @@ int main() {
             (nextCp > oldNc ? nextCp - oldNc : nextCp + (checkpoints.size() - oldNc));
         }
     }
-    cerr <<  "next cps: " << pods[0].nextCheckpoint << " "  << pods[1].nextCheckpoint << endl;
-    world = World(checkpoints, pods);
+    // cerr <<  "next cps: " << pods[0].nextCheckpoint << " "  << pods[1].nextCheckpoint << endl;
+    world = World(checkpoints, {pods[0], pods[1]});
     auto controls = brain.optimalControl(world);
-    cerr << "before cout \n";
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
       Vec<float> unit(1, 0);
+      // cerr << "before " << abs(pods[i].v.toFloat().angle((checkpoints[pods[i].nextCheckpoint].r - pods[i].r).toFloat())) << endl;
       unit.rotate(pods[i].angle + controls[i].angle);
-      cerr << "agnles: " << pods[i].angle << " " << controls[i].angle << " " << unit << endl;
+      //cerr << "agnles: " << pods[i].angle << " " << controls[i].angle << " " << unit << endl;
       Vec<int> desired = pods[i].r + (unit * 1000).toInt();
       cout << desired.x << " " << desired.y << " ";
       int power = controls[i].power;
@@ -622,10 +625,13 @@ int main() {
     cerr << controls << endl;
     world.blink(controls);
    
-     
+    // cerr << "cppassed " << pods[0].checkpointsPassed << endl ;
     for (int i = 0; i < 2; i++) {
-      cerr << " next state: " <<  world.pods[i].r.x << " " <<  world.pods[i].r.y << " " <<  world.pods[i].v.x << " " <<  world.pods[i].v.y ;
+      Pod p = world.pods[i];
+      // cerr << " next state: " <<  world.pods[i].r.x << " " <<  world.pods[i].r.y << " " <<  world.pods[i].v.x << " " <<  world.pods[i].v.y ;
+      // cerr << "after " << abs(p.v.toFloat().angle((checkpoints[p.nextCheckpoint].r - p.r).toFloat())) << endl;
     }
+    // cerr << "cppassed after" << world.pods[0].checkpointsPassed << endl ;
     round++;
   }
 }
