@@ -215,7 +215,7 @@ public:
       return -1;
 
     // dist from b's center to a's movement line
-    float roSq = Sq(relv.outerZ(relbr)) / relvNormSq;
+    float roSq = Sq(relv.outerZ(relbr) + 0.0) / relvNormSq;
 
     if (roSq > Sq(a.R + b.R))
       return -1;
